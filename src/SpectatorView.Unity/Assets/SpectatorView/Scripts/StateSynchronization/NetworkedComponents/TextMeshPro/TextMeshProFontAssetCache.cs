@@ -7,10 +7,7 @@ using UnityEngine;
 
 namespace Microsoft.MixedReality.SpectatorView
 {
-    [Serializable]
-    internal class TextMeshProFontAsset : AssetCacheEntry<ScriptableObject> { }
-
-    internal class TextMeshProFontAssetCache : AssetCache<TextMeshProFontAssetCache, TextMeshProFontAsset, ScriptableObject>
+    internal class TextMeshProFontAssetCache : AssetCache<TextMeshProFontAssetCache, ScriptableObject>
     {
         private static bool IsAssetFileExtension(string fileExtension)
         {

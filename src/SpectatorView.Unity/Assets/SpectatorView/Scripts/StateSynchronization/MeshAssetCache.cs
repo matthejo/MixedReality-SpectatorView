@@ -8,10 +8,7 @@ using UnityEngine;
 
 namespace Microsoft.MixedReality.SpectatorView
 {
-    [Serializable]
-    internal class MeshAsset : AssetCacheEntry<Mesh> { }
-
-    internal class MeshAssetCache : AssetCache<MeshAssetCache, MeshAsset, Mesh>
+    internal class MeshAssetCache : AssetCache<MeshAssetCache, Mesh>
     {
         protected override IEnumerable<Mesh> EnumerateAllAssets()
         {

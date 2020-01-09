@@ -7,10 +7,7 @@ using UnityEngine.Audio;
 
 namespace Microsoft.MixedReality.SpectatorView
 {
-    [Serializable]
-    internal class AudioMixerGroupAsset : AssetCacheEntry<AudioMixerGroup> { }
-
-    internal class AudioMixerGroupAssetCache : AssetCache<AudioMixerGroupAssetCache, AudioMixerGroupAsset, AudioMixerGroup>
+    internal class AudioMixerGroupAssetCache : AssetCache<AudioMixerGroupAssetCache, AudioMixerGroup>
     {
         private static bool IsAudioMixerFileExtension(string fileExtension)
         {

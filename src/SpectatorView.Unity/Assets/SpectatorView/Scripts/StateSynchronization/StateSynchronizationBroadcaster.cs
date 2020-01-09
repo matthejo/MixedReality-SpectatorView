@@ -38,7 +38,7 @@ namespace Microsoft.MixedReality.SpectatorView
 
         protected override int RemotePort => Port;
 
-        public event Action<SocketEndpoint> ConnectedAndReady;
+        public event Action<INetworkConnection> ConnectedAndReady;
 
         protected override void Awake()
         {
@@ -70,42 +70,27 @@ namespace Microsoft.MixedReality.SpectatorView
         protected override void Start()
         {
             base.Start();
-
-            SetupNetworkConnectionManager();
+            StartListening(Port);
         }
 
-        protected virtual void SetupNetworkConnectionManager()
-        {
-            if (connectionManager != null)
-            {
-                DebugLog("Setting up connection manager");
-
-                connectionManager.StartListening(Port);
-            }
-            else
-            {
-                Debug.LogWarning("Connection Manager not defined for Broadcaster.");
-            }
-        }
-
-        private void DebugLog(string message, [CallerMemberName] string callerMemberName = null)
+        private void DebugLog(string message)
         {
             if (debugLogging)
             {
-                Debug.Log($"StateSynchronizationBroadcaster - {callerMemberName}: {message}", this);
+                Debug.Log($"StateSynchronizationBroadcaster - {message}");
             }
         }
 
-        protected override void OnConnected(SocketEndpoint endpoint)
+        protected override void OnConnected(INetworkConnection connection)
         {
-            DebugLog($"Broadcaster received connection from {endpoint.Address}.");
-            base.OnConnected(endpoint);
+            DebugLog($"Broadcaster received connection from {connection.ToString()}.");
+            base.OnConnected(connection);
         }
 
-        protected override void OnDisconnected(SocketEndpoint endpoint)
+        protected override void OnDisconnected(INetworkConnection connection)
         {
-            DebugLog($"Broadcaster received disconnect from {endpoint.Address}.");
-            base.OnDisconnected(endpoint);
+            DebugLog($"Broadcaster received disconnect from {connection.ToString()}"); ;
+            base.OnDisconnected(connection);
         }
 
         /// <summary>
@@ -115,7 +100,7 @@ namespace Microsoft.MixedReality.SpectatorView
         {
             get
             {
-                return connectionManager != null && connectionManager.HasConnections;
+                return connectionManager != null && connectionManager.Connections.Count > 0;
             }
         }
 
@@ -195,7 +180,7 @@ namespace Microsoft.MixedReality.SpectatorView
                 message.Write(camTrans != null ? camTrans.rotation : Quaternion.identity);
                 message.Flush();
 
-                connectionManager.Broadcast(memoryStream.ToArray());
+                connectionManager.Broadcast(memoryStream.GetBuffer(), 0, memoryStream.Position);
             }
 
             //Perf
@@ -209,7 +194,7 @@ namespace Microsoft.MixedReality.SpectatorView
                     message.Write(StateSynchronizationObserver.PerfCommand);
                     StateSynchronizationPerformanceMonitor.Instance.WriteMessage(message, numFrames);
                     message.Flush();
-                    connectionManager.Broadcast(memoryStream.ToArray());
+                    connectionManager.Broadcast(memoryStream.GetBuffer(), 0, memoryStream.Position);
                 }
 
                 timeUntilNextPerfUpdate = PerfUpdateTimeSeconds;
@@ -217,13 +202,13 @@ namespace Microsoft.MixedReality.SpectatorView
             }
         }
 
-        public void HandleSyncCommand(SocketEndpoint endpoint, string command, BinaryReader reader, int remainingDataSize)
+        public void HandleSyncCommand(INetworkConnection connection, string command, BinaryReader reader, int remainingDataSize)
         {
             reader.ReadSingle(); // float time
-            StateSynchronizationSceneManager.Instance.ReceiveMessage(endpoint, reader);
+            StateSynchronizationSceneManager.Instance.ReceiveMessage(connection, reader);
         }
 
-        private void HandlePerfMonitoringModeEnableRequest(SocketEndpoint endpoint, string command, BinaryReader reader, int remainingDataSize)
+        private void HandlePerfMonitoringModeEnableRequest(INetworkConnection connection, string command, BinaryReader reader, int remainingDataSize)
         {
             bool enabled = reader.ReadBoolean();
             if (StateSynchronizationPerformanceMonitor.Instance != null)
@@ -265,7 +250,7 @@ namespace Microsoft.MixedReality.SpectatorView
             return (data != null);
         }
 
-        private void HandleAssetBundleRequestInfo(SocketEndpoint endpoint, string command, BinaryReader reader, int remainingDataSize)
+        private void HandleAssetBundleRequestInfo(INetworkConnection connection, string command, BinaryReader reader, int remainingDataSize)
         {
             AssetBundlePlatform platform = (AssetBundlePlatform)reader.ReadByte();
             DebugLog($"Received asset bundle info request for platform {platform}");
@@ -284,11 +269,12 @@ namespace Microsoft.MixedReality.SpectatorView
                     writer.Write(versionDisplayName);
                 }
 
-                endpoint.Send(stream.ToArray());
+                var message = stream.ToArray();
+                connection.Send(message, 0, message.LongLength);
             }
         }
 
-        private void HandleAssetBundleRequestDownload(SocketEndpoint endpoint, string command, BinaryReader reader, int remainingDataSize)
+        private void HandleAssetBundleRequestDownload(INetworkConnection connection, string command, BinaryReader reader, int remainingDataSize)
         {
             AssetBundlePlatform platform = (AssetBundlePlatform)reader.ReadByte();
 
@@ -302,7 +288,7 @@ namespace Microsoft.MixedReality.SpectatorView
 
                 if (hasAsset)
                 {
-                    DebugLog($"Starting {StateSynchronizationObserver.FormatBytes(data.Length)} asset bundle send to {endpoint.Address}. Bundle: {AssetBundleVersion.Format(versionIdentity, versionDisplayName)}...");
+                    DebugLog($"Starting {StateSynchronizationObserver.FormatBytes(data.Length)} asset bundle send to {connection.ToString()}. Bundle: {AssetBundleVersion.Format(versionIdentity, versionDisplayName)}...");
 
                     writer.Write(versionIdentity);
                     writer.Write(versionDisplayName);
@@ -310,26 +296,27 @@ namespace Microsoft.MixedReality.SpectatorView
 
                     pendingAssetBundleSends.Add(new AssetBundleSend
                     {
-                        Recipient = endpoint,
+                        Recipient = connection,
                         Data = data,
                         NextDataToSendIndex = 0,
                     });
                 }
                 else
                 {
-                    DebugLog($"Unexpectedly received asset bundle download request for platform {platform} from {endpoint.Address}.");
+                    DebugLog($"Unexpectedly received asset bundle download request for platform {platform} from {connection.ToString()}.");
                 }
 
-                endpoint.Send(stream.ToArray());
+                var message = stream.ToArray();
+                connection.Send(message, 0, message.LongLength);
             }
         }
 
-        private void HandleAssetLoadCompleted(SocketEndpoint endpoint, string command, BinaryReader reader, int remainingDataSize)
+        private void HandleAssetLoadCompleted(INetworkConnection connection, string command, BinaryReader reader, int remainingDataSize)
         {
-            DebugLog($"Asset loading is complete for {endpoint.Address}, sending the {nameof(ConnectedAndReady)} event.");
+            DebugLog($"Asset loading is complete for {connection.ToString()}, sending the {nameof(ConnectedAndReady)} event.");
 
             // Notify everyone the connection is actually ready
-            ConnectedAndReady?.Invoke(endpoint);
+            ConnectedAndReady?.Invoke(connection);
         }
 
         private void UpdatePendingAssetBundleSends()
@@ -353,22 +340,23 @@ namespace Microsoft.MixedReality.SpectatorView
                         writer.Write(pendingSend.Data, pendingSend.NextDataToSendIndex, bytesToSend);
                         pendingSend.NextDataToSendIndex += bytesToSend;
 
-                        pendingSend.Recipient.Send(stream.ToArray());
+                        var message = stream.ToArray();
+                        pendingSend.Recipient.Send(message, 0, message.LongLength);
                     }
 
                     if (pendingSend.NextDataToSendIndex == pendingSend.Data.Length)
                     {
-                        DebugLog($"Completed {StateSynchronizationObserver.FormatBytes(pendingSend.Data.Length)} asset bundle send to {pendingSend.Recipient.Address}.");
+                        DebugLog($"Completed {StateSynchronizationObserver.FormatBytes(pendingSend.Data.Length)} asset bundle send to {pendingSend.Recipient.ToString()}.");
                         pendingAssetBundleSends.RemoveAt(iPendingSend);
                     }
                     else
                     {
-                        DebugLog($"Sent {StateSynchronizationObserver.FormatByteProgress(pendingSend.NextDataToSendIndex, pendingSend.Data.Length)} of asset bundle to {pendingSend.Recipient.Address}. Waiting to send more...");
+                        DebugLog($"Sent {StateSynchronizationObserver.FormatByteProgress(pendingSend.NextDataToSendIndex, pendingSend.Data.Length)} of asset bundle to {pendingSend.Recipient.ToString()}. Waiting to send more...");
                     }
                 }
                 else
                 {
-                    DebugLog($"Abandoning asset bundle send, because observer {pendingSend.Recipient.Address} disconnected.");
+                    DebugLog($"Abandoning asset bundle send, because observer {pendingSend.Recipient.ToString()} disconnected.");
                     pendingAssetBundleSends.RemoveAt(iPendingSend);
                 }
             }
@@ -376,7 +364,7 @@ namespace Microsoft.MixedReality.SpectatorView
 
         private class AssetBundleSend
         {
-            public SocketEndpoint Recipient;
+            public INetworkConnection Recipient;
             public byte[] Data;
             public int NextDataToSendIndex;
         }

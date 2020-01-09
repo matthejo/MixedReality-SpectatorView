@@ -64,5 +64,10 @@ namespace Microsoft.MixedReality.SpectatorView
         {
             SpriteAssetCache.GetOrCreateAssetCache<SpriteAssetCache>().ClearAssetCache();
         }
+
+        public void SaveAssets()
+        {
+            SpriteAssetCache.GetOrCreateAssetCache<SpriteAssetCache>().SaveAssets();
+        }
     }
 }

@@ -50,13 +50,6 @@ namespace Microsoft.MixedReality.SpectatorView
         private GameObject defaultMobileNetworkConfigurationVisualPrefab = null;
 #pragma warning restore 414
 
-        /// <summary>
-        /// Uncheck to reshow the network configuration visual prefab on network disconnect. If kept checked a network reconnect will be attempted indefinitely.
-        /// </summary>
-        [Tooltip("Uncheck to reshow the network configuration visual prefab on network disconnect. If checked, a network reconnect will be attempted indefinitely after setting up the initial network configuration.")]
-        [SerializeField]
-        private bool automaticallyAttemptNetworkReconnects = false;
-
         [Header("State Synchronization")]
         /// <summary>
         /// StateSynchronizationSceneManager MonoBehaviour
@@ -244,7 +237,7 @@ namespace Microsoft.MixedReality.SpectatorView
             }
         }
 
-        private void OnSpectatorNetworkDisconnect(SocketEndpoint endoint)
+        private void OnSpectatorNetworkDisconnect(INetworkConnection connectionn)
         {
             if (stateSynchronizationObserver != null)
             {
@@ -302,15 +295,7 @@ namespace Microsoft.MixedReality.SpectatorView
             // The StateSynchronizationSceneManager needs to be enabled after the broadcaster/observer
             stateSynchronizationSceneManager.gameObject.SetActive(true);
 
-            if (!automaticallyAttemptNetworkReconnects)
-            {
-                // Listen for disconnects in order to reshow the network configuration visual
-                stateSynchronizationObserver.Disconnected += OnSpectatorNetworkDisconnect;
-
-                // Tell the StateSynchronizationObserver to prevent attempting reconnects
-                DebugLog("Disabling attempts to reconnect on disconnect.");
-                stateSynchronizationObserver.AttemptReconnectWhenClient = false;
-            }
+            stateSynchronizationObserver.Disconnected += OnSpectatorNetworkDisconnect;
 
             // Make sure the StateSynchronizationSceneManager is enabled prior to connecting the observer
             stateSynchronizationObserver.ConnectTo(userIpAddress);
@@ -471,7 +456,7 @@ namespace Microsoft.MixedReality.SpectatorView
 
         private async Task<bool> TryRunLocalizationForParticipantAsync(SpatialCoordinateSystemParticipant participant)
         {
-            DebugLog($"Waiting for the set of supported localizers from connected participant {participant.SocketEndpoint.Address}");
+            DebugLog($"Waiting for the set of supported localizers from connected participant {participant.NetworkConnection.ToString()}");
 
             if (!peerSupportedLocalizers.ContainsKey(participant))
             {
@@ -534,11 +519,11 @@ namespace Microsoft.MixedReality.SpectatorView
                     bool result = await initializers[i].TryRunLocalizationAsync(participant);
                     if (!result)
                     {
-                        Debug.LogError($"Failed to localize experience with participant: {participant.SocketEndpoint.Address}");
+                        Debug.LogError($"Failed to localize experience with participant: {participant.NetworkConnection.ToString()}");
                     }
                     else
                     {
-                        DebugLog($"Succeeded in localizing experience with participant: {participant.SocketEndpoint.Address}");
+                        DebugLog($"Succeeded in localizing experience with participant: {participant.NetworkConnection.ToString()}");
                     }
 
                     return result;

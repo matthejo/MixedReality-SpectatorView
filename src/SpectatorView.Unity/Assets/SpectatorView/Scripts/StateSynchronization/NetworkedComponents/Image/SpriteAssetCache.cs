@@ -8,10 +8,7 @@ using UnityEngine.UI;
 
 namespace Microsoft.MixedReality.SpectatorView
 {
-    [Serializable]
-    internal class SpriteAsset : AssetCacheEntry<Sprite> { }
-
-    internal class SpriteAssetCache : AssetCache<SpriteAssetCache, SpriteAsset, Sprite>
+    internal class SpriteAssetCache : AssetCache<SpriteAssetCache, Sprite>
     {
         protected override IEnumerable<Sprite> EnumerateAllAssets()
         {

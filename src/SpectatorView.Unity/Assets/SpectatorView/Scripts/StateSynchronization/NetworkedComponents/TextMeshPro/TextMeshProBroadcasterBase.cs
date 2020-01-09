@@ -57,14 +57,14 @@ namespace Microsoft.MixedReality.SpectatorView
             return change;
         }
 
-        protected override void SendCompleteChanges(IEnumerable<SocketEndpoint> endpoints)
+        protected override void SendCompleteChanges(IEnumerable<INetworkConnection> connections)
         {
             previousText = this.textMesh.text;
             previousProperties = new TextMeshProperties(textMesh);
-            SendDeltaChanges(endpoints, TextMeshProBroadcasterChangeType.FontAndPlacement | TextMeshProBroadcasterChangeType.Text);
+            SendDeltaChanges(connections, TextMeshProBroadcasterChangeType.FontAndPlacement | TextMeshProBroadcasterChangeType.Text);
         }
 
-        protected override void SendDeltaChanges(IEnumerable<SocketEndpoint> endpoints, TextMeshProBroadcasterChangeType changeFlags)
+        protected override void SendDeltaChanges(IEnumerable<INetworkConnection> connections, TextMeshProBroadcasterChangeType changeFlags)
         {
             using (MemoryStream memoryStream = new MemoryStream())
             using (BinaryWriter message = new BinaryWriter(memoryStream))
@@ -75,7 +75,7 @@ namespace Microsoft.MixedReality.SpectatorView
                 WriteText(changeFlags, message);
 
                 message.Flush();
-                StateSynchronizationSceneManager.Instance.Send(endpoints, memoryStream.ToArray());
+                StateSynchronizationSceneManager.Instance.Send(connections, memoryStream.GetBuffer(), 0, memoryStream.Position);
             }
         }
 
@@ -354,12 +354,12 @@ namespace Microsoft.MixedReality.SpectatorView
             throw new NotImplementedException();
         }
 
-        protected override void SendCompleteChanges(IEnumerable<SocketEndpoint> endpoints)
+        protected override void SendCompleteChanges(IEnumerable<INetworkConnection> connections)
         {
             throw new NotImplementedException();
         }
 
-        protected override void SendDeltaChanges(IEnumerable<SocketEndpoint> endpoints, TextMeshProBroadcasterChangeType changeFlags)
+        protected override void SendDeltaChanges(IEnumerable<INetworkConnection> connections, TextMeshProBroadcasterChangeType changeFlags)
         {
             throw new NotImplementedException();
         }

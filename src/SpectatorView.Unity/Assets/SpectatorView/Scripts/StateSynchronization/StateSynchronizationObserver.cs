@@ -70,18 +70,7 @@ namespace Microsoft.MixedReality.SpectatorView
             // messages even if it loses focus
             Application.runInBackground = true;
 
-            if (connectionManager != null)
-            {
-                DebugLog("Setting up connection manager");
-
-                // Start listening to incoming connections as well.
-                connectionManager.StartListening(port);
-            }
-            else
-            {
-                Debug.LogError("Connection manager not specified for Observer.");
-            }
-
+            StartListening(port);
             RegisterCommandHandler(SyncCommand, HandleSyncCommand);
             RegisterCommandHandler(CameraCommand, HandleCameraCommand);
             RegisterCommandHandler(PerfCommand, HandlePerfCommand);
@@ -125,18 +114,18 @@ namespace Microsoft.MixedReality.SpectatorView
             }
         }
 
-        protected override void OnConnected(SocketEndpoint endpoint)
+        protected override void OnConnected(INetworkConnection connection)
         {
-            base.OnConnected(endpoint);
+            base.OnConnected(connection);
 
-            DebugLog($"Observer Connected to endpoint: {endpoint.Address}");
+            DebugLog($"Observer Connected to connection: {connection.ToString()}");
 
             if (StateSynchronizationSceneManager.IsInitialized)
             {
                 StateSynchronizationSceneManager.Instance.MarkSceneDirty();
             }
 
-            hologramSynchronizer.Reset(endpoint);
+            hologramSynchronizer.Reset(connection);
 
             AssetState = new AssetState
             {
@@ -144,10 +133,10 @@ namespace Microsoft.MixedReality.SpectatorView
                 AssetBundleDisplayName = currentAssetBundleDisplayName,
             };
 
-            SendAssetBundleInfoRequest(endpoint);
+            SendAssetBundleInfoRequest(connection);
         }
 
-        private void HandleCameraCommand(SocketEndpoint endpoint, string command, BinaryReader reader, int remainingDataSize)
+        public void HandleCameraCommand(INetworkConnection connection, string command, BinaryReader reader, int remainingDataSize)
         {
             float timeStamp = reader.ReadSingle();
             hologramSynchronizer.RegisterCameraUpdate(timeStamp);
@@ -155,33 +144,29 @@ namespace Microsoft.MixedReality.SpectatorView
             transform.rotation = reader.ReadQuaternion();
         }
 
-        private void HandleSyncCommand(SocketEndpoint endpoint, string command, BinaryReader reader, int remainingDataSize)
+        public void HandleSyncCommand(INetworkConnection connection, string command, BinaryReader reader, int remainingDataSize)
         {
             float timeStamp = reader.ReadSingle();
             hologramSynchronizer.RegisterFrameData(reader.ReadBytes(remainingDataSize), timeStamp);
         }
 
-        private void HandlePerfCommand(SocketEndpoint endpoint, string command, BinaryReader reader, int remainingDataSize)
+        public void HandlePerfCommand(INetworkConnection connection, string command, BinaryReader reader, int remainingDataSize)
         {
             StateSynchronizationPerformanceMonitor.ReadMessage(reader, out lastPerfMessage);
         }
 
         public void SetPerformanceMonitoringMode(bool enabled)
         {
-            if (connectionManager != null &&
-                connectionManager.HasConnections)
+            if (IsConnected)
             {
-                byte[] message;
                 using (MemoryStream stream = new MemoryStream())
                 using (BinaryWriter writer = new BinaryWriter(stream))
                 {
                     writer.Write(PerfDiagnosticModeEnabledCommand);
                     writer.Write(enabled);
                     writer.Flush();
-                    message = stream.ToArray();
+                    connectionManager.Broadcast(stream.GetBuffer(), 0, stream.Position);
                 }
-
-                connectionManager.Broadcast(message);
             }
         }
 
@@ -191,7 +176,7 @@ namespace Microsoft.MixedReality.SpectatorView
         internal IReadOnlyList<Tuple<string, int>> PerformanceEventCounts => lastPerfMessage.EventCounts;
         internal IReadOnlyList<Tuple<string, StateSynchronizationPerformanceMonitor.MemoryUsage>> PerformanceMemoryUsageEvents => lastPerfMessage.MemoryUsages;
 
-        private void HandleAssetBundleInfoCommand(SocketEndpoint endpoint, string command, BinaryReader reader, int remainingDataSize)
+        private void HandleAssetBundleInfoCommand(INetworkConnection connection, string command, BinaryReader reader, int remainingDataSize)
         {
             bool hasAssetBundle = reader.ReadBoolean();
             if (hasAssetBundle)
@@ -209,13 +194,13 @@ namespace Microsoft.MixedReality.SpectatorView
                         AssetBundleDisplayName = currentAssetBundleDisplayName,
                     };
 
-                    SendAssetsLoaded(endpoint);
+                    SendAssetsLoaded(connection);
                 }
                 else
                 {
                     DebugLog($"Requesting asset bundle download for {AssetBundleVersion.Format(assetBundleIdentity, assetBundleDisplayName)}...");
                     Debug.Assert(AssetState.Status == AssetStateStatus.RequestingAssetBundle, this);
-                    SendAssetBundleDownloadRequest(endpoint);
+                    SendAssetBundleDownloadRequest(connection);
                 }
             }
             else
@@ -229,11 +214,11 @@ namespace Microsoft.MixedReality.SpectatorView
                     Status = (AssetCache.AssetCacheCount > 0) ? AssetStateStatus.Preloaded : AssetStateStatus.NonePreloadedAndNoAssetBundleAvailable,
                 };
 
-                SendAssetsLoaded(endpoint);
+                SendAssetsLoaded(connection);
             }
         }
 
-        private void HandleAssetBundleDownloadStartCommand(SocketEndpoint endpoint, string command, BinaryReader reader, int remainingDataSize)
+        private void HandleAssetBundleDownloadStartCommand(INetworkConnection connection, string command, BinaryReader reader, int remainingDataSize)
         {
             bool hasAssetBundle = reader.ReadBoolean();
 
@@ -269,11 +254,11 @@ namespace Microsoft.MixedReality.SpectatorView
                     Status = (AssetCache.AssetCacheCount > 0) ? AssetStateStatus.Preloaded : AssetStateStatus.NonePreloadedAndNoAssetBundleAvailable,
                 };
 
-                SendAssetsLoaded(endpoint);
+                SendAssetsLoaded(connection);
             }
         }
 
-        private void HandleAssetBundleDownloadDataCommand(SocketEndpoint endpoint, string command, BinaryReader reader, int remainingDataSize)
+        private void HandleAssetBundleDownloadDataCommand(INetworkConnection connection, string command, BinaryReader reader, int remainingDataSize)
         {
             if (pendingAssetBundleReceive == null)
             {
@@ -336,7 +321,7 @@ namespace Microsoft.MixedReality.SpectatorView
                             AssetBundleDisplayName = currentAssetBundleDisplayName,
                         };
 
-                        SendAssetsLoaded(endpoint);
+                        SendAssetsLoaded(connection);
                     }
                     else
                     {
@@ -370,14 +355,13 @@ namespace Microsoft.MixedReality.SpectatorView
 
         private void CheckAndSendHeartbeat()
         {
-            if (connectionManager != null &&
-                connectionManager.HasConnections)
+            if (IsConnected)
             {
                 timeSinceLastHeartbeat += Time.deltaTime;
                 if (timeSinceLastHeartbeat > heartbeatTimeInterval)
                 {
                     timeSinceLastHeartbeat = 0.0f;
-                    connectionManager.Broadcast(heartbeatMessage);
+                    connectionManager.Broadcast(heartbeatMessage, 0, heartbeatMessage.Length);
                 }
             }
         }
@@ -396,7 +380,7 @@ namespace Microsoft.MixedReality.SpectatorView
             }
         }
 
-        private void SendAssetBundleInfoRequest(SocketEndpoint endpoint)
+        private void SendAssetBundleInfoRequest(INetworkConnection connection)
         {
             DebugLog($"Sending a request for asset bundle info for {AssetBundlePlatformInfo.Current}");
             using (MemoryStream stream = new MemoryStream())
@@ -405,11 +389,12 @@ namespace Microsoft.MixedReality.SpectatorView
                 writer.Write(AssetBundleRequestInfoCommand);
                 writer.Write((byte)AssetBundlePlatformInfo.Current);
 
-                endpoint.Send(stream.ToArray());
+                var message = stream.ToArray();
+                connection.Send(message, 0, message.LongLength);
             }
         }
 
-        private void SendAssetBundleDownloadRequest(SocketEndpoint endpoint)
+        private void SendAssetBundleDownloadRequest(INetworkConnection connection)
         {
             using (MemoryStream stream = new MemoryStream())
             using (BinaryWriter writer = new BinaryWriter(stream))
@@ -417,18 +402,20 @@ namespace Microsoft.MixedReality.SpectatorView
                 writer.Write(AssetBundleRequestDownloadCommand);
                 writer.Write((byte)AssetBundlePlatformInfo.Current);
 
-                endpoint.Send(stream.ToArray());
+                var message = stream.ToArray();
+                connection.Send(message, 0, message.LongLength);
             }
         }
 
-        private void SendAssetsLoaded(SocketEndpoint endpoint)
+        private void SendAssetsLoaded(INetworkConnection connection)
         {
             using (MemoryStream stream = new MemoryStream())
             using (BinaryWriter writer = new BinaryWriter(stream))
             {
                 writer.Write(AssetLoadCompletedCommand);
 
-                endpoint.Send(stream.ToArray());
+                var message = stream.ToArray();
+                connection.Send(message, 0, message.LongLength);
             }
         }
 
