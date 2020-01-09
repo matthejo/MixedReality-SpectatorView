@@ -1,10 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
-#if STATESYNC_TEXTMESHPRO
 using System;
 using TMPro;
-#endif
 
 namespace Microsoft.MixedReality.SpectatorView
 {
@@ -14,7 +12,6 @@ namespace Microsoft.MixedReality.SpectatorView
 
         public override ShortID GetID() { return ID; }
 
-#if STATESYNC_TEXTMESHPRO
         private void Start()
         {
             StateSynchronizationSceneManager.Instance.RegisterService(this, new ComponentBroadcasterDefinition<TextMeshProBroadcaster>(typeof(TextMeshPro)));
@@ -45,7 +42,6 @@ namespace Microsoft.MixedReality.SpectatorView
                 return (TMP_FontAsset)fontAssets.GetAsset(assetId);
             }
         }
-#endif
 
         public void UpdateAssetCache()
         {
