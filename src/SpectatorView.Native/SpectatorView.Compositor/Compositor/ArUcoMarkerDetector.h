@@ -21,6 +21,7 @@ public:
     bool GetDetectedMarkerIds(int* _detectedIds, int size);
     bool GetDetectedMarkerPose(int _detectedId, Vector3* position, Vector3* rotation);
     void Reset() { _detectedMarkers.clear(); }
+    uint16_t* GetDilatedMask(uint16_t* mask, int col, int row);
 
 private:
     std::unordered_map<int, Marker> _detectedMarkers;

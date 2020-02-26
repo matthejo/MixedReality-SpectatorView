@@ -174,6 +174,8 @@ void AzureKinectFrameProvider::Update(int compositeFrameIndex)
             height = k4a_image_get_height_pixels(transformedBodyMaskImage);
             width = k4a_image_get_width_pixels(transformedBodyMaskImage);
 
+            uint16_t* bodyMaskDilated = markerDetector->GetDilatedMask(bodyMaskBuffer, height, width);
+
             bodyMaskBuffer = reinterpret_cast<uint16_t*>(k4a_image_get_buffer(transformedBodyMaskImage));
 
             // Set transformed body mask buffer to 1 where bodies are not recognized  

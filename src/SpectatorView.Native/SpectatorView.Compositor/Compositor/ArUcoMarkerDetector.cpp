@@ -147,3 +147,23 @@ bool ArUcoMarkerDetector::GetDetectedMarkerPose(int _detectedId, Vector3* positi
 
     return true;
 }
+
+uint16_t* ArUcoMarkerDetector::GetDilatedMask(uint16_t* mask, int col, int row)
+{
+    int dilation_type = cv::MORPH_RECT;
+    int dilation_size = 1;
+
+    cv::Size size(col, row);
+
+    cv::Mat nonDilatedMask = cv::Mat(size, CV_16U, mask);
+
+    cv::Mat dilatedMask = cv::Mat(size, CV_16U);
+
+    cv::Mat kernal = cv::getStructuringElement(dilation_type,
+        cv::Size(2 * dilation_size + 1, 2 * dilation_size + 1),
+        cv::Point(dilation_size, dilation_size));
+
+    cv::dilate(nonDilatedMask, dilatedMask, kernal);
+
+    return mask;
+}
